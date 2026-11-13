@@ -1,0 +1,93 @@
+{
+  "info": {
+    "name": "API de productos",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    }
+  ],
+  "item": [
+    {
+      "name": "Listar productos",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/productos"
+      }
+    },
+    {
+      "name": "Listar productos por precio máximo",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/productos?max=50000"
+      }
+    },
+    {
+      "name": "Obtener producto",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/productos/1"
+      }
+    },
+    {
+      "name": "Crear producto",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nombre\": \"Monitor\",\n  \"precio\": 450000,\n  \"stock\": 8\n}"
+        },
+        "url": "{{baseUrl}}/productos"
+      }
+    },
+    {
+      "name": "Reemplazar producto",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nombre\": \"Teclado mecánico\",\n  \"precio\": 120000,\n  \"stock\": 12\n}"
+        },
+        "url": "{{baseUrl}}/productos/1"
+      }
+    },
+    {
+      "name": "Actualizar algunos campos",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"precio\": 90000\n}"
+        },
+        "url": "{{baseUrl}}/productos/1"
+      }
+    },
+    {
+      "name": "Eliminar producto",
+      "request": {
+        "method": "DELETE",
+        "url": "{{baseUrl}}/productos/1"
+      }
+    }
+  ]
+}
