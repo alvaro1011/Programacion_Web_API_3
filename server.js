@@ -1,149 +1,205 @@
 import express from "express";
+import { db } from "./db.js";
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
-const productos = [
-  { id: 1, nombre: "Teclado", precio: 80000, stock: 10 },
-  { id: 2, nombre: "Mouse", precio: 35000, stock: 25 },
-];
-let siguienteId = 3;
-
-app.get("/productos", (req, res) => {
-  const { max } = req.query;
-
-  if (max === undefined) {
-    return res.status(200).json(productos);
-  }
-
-  const precioMaximo = Number(max);
-  if (
-    typeof max !== "string" ||
-    max.trim() === "" ||
-    !Number.isFinite(precioMaximo) ||
-    precioMaximo < 0
-  ) {
-    return res.status(400).json({ mensaje: "El parámetro max no es válido" });
-  }
-
-  const filtrados = productos.filter((producto) => producto.precio <= precioMaximo);
-  return res.status(200).json(filtrados);
-});
-
-app.get("/productos/:id", (req, res) => {
-  const id = Number(req.params.id);
-  const producto = productos.find((item) => item.id === id);
-
-  if (!producto) {
-    return res.status(404).json({ mensaje: "Producto no encontrado" });
-  }
-
-  return res.status(200).json(producto);
-});
-
-app.post("/productos", (req, res) => {
-  const datos = req.body;
-
-  if (!datos || typeof datos !== "object" || Array.isArray(datos)) {
-    return res.status(400).json({ mensaje: "Faltan datos o no son válidos" });
-  }
-
-  const { nombre, precio, stock = 0 } = datos;
-  if (
+function datosInvalidos(nombre, precio, stock) {
+  return (
     typeof nombre !== "string" ||
     nombre.trim() === "" ||
     typeof precio !== "number" ||
-    !Number.isFinite(precio) ||
     precio < 0 ||
     typeof stock !== "number" ||
-    !Number.isFinite(stock) ||
     stock < 0
-  ) {
-    return res.status(400).json({ mensaje: "Faltan datos o no son válidos" });
-  }
+  );
+}
 
-  const nuevoProducto = { id: siguienteId++, nombre, precio, stock };
-  productos.push(nuevoProducto);
-  return res.status(201).json(nuevoProducto);
+const ERROR_BD = { error: "Error en la base de datos" };
+
+// 1. GET /productos  -> SELECT
+// Lista todos los productos. Reto: filtrar por precio máximo (?max=).
+app.get("/productos", async (req, res) => {
+  try {
+    const { max } = req.query;
+
+    if (max === undefined) {
+      const [filas] = await db.query("SELECT * FROM productos");
+      return res.status(200).json(filas);
+    }
+
+    const precioMaximo = Number(max);
+
+    if (Number.isNaN(precioMaximo) || precioMaximo < 0) {
+      return res.status(400).json({
+        error: "El parámetro max debe ser un número mayor o igual a cero"
+      });
+    }
+
+    const [filas] = await db.query(
+      "SELECT * FROM productos WHERE precio <= ?",
+      [precioMaximo]
+    );
+
+    res.status(200).json(filas);
+  } catch (error) {
+    res.status(500).json(ERROR_BD);
+  }
 });
 
-app.put("/productos/:id", (req, res) => {
-  const id = Number(req.params.id);
-  const indice = productos.findIndex((producto) => producto.id === id);
+// 2. GET /productos/:id  -> SELECT ... WHERE
+app.get("/productos/:id", async (req, res) => {
+  try {
+    const [filas] = await db.query(
+      "SELECT * FROM productos WHERE id = ?",
+      [req.params.id]
+    );
 
-  if (indice === -1) {
-    return res.status(404).json({ mensaje: "Producto no encontrado" });
+    if (filas.length === 0) {
+      return res.status(404).json({ error: "Producto no encontrado" });
+    }
+
+    res.status(200).json(filas[0]);
+  } catch (error) {
+    res.status(500).json(ERROR_BD);
   }
-
-  const datos = req.body;
-  if (!datos || typeof datos !== "object" || Array.isArray(datos)) {
-    return res.status(400).json({ mensaje: "Faltan datos o no son válidos" });
-  }
-
-  const { nombre, precio, stock } = datos;
-  if (
-    typeof nombre !== "string" ||
-    nombre.trim() === "" ||
-    typeof precio !== "number" ||
-    !Number.isFinite(precio) ||
-    precio < 0 ||
-    typeof stock !== "number" ||
-    !Number.isFinite(stock) ||
-    stock < 0
-  ) {
-    return res.status(400).json({ mensaje: "Faltan datos o no son válidos" });
-  }
-
-  productos[indice] = { id, nombre, precio, stock };
-  return res.status(200).json(productos[indice]);
 });
 
-app.patch("/productos/:id", (req, res) => {
-  const id = Number(req.params.id);
-  const producto = productos.find((item) => item.id === id);
+// 3. POST /productos  -> INSERT
+app.post("/productos", async (req, res) => {
+  try {
+    const { nombre, precio, stock = 0 } = req.body;
 
-  if (!producto) {
-    return res.status(404).json({ mensaje: "Producto no encontrado" });
+    if (datosInvalidos(nombre, precio, stock)) {
+      return res.status(400).json({
+        error: "Nombre, precio o stock no son válidos"
+      });
+    }
+
+    const [resultado] = await db.query(
+      "INSERT INTO productos (nombre, precio, stock) VALUES (?, ?, ?)",
+      [nombre.trim(), precio, stock]
+    );
+
+    res.status(201).json({
+      id: resultado.insertId,
+      nombre: nombre.trim(),
+      precio,
+      stock
+    });
+  } catch (error) {
+    res.status(500).json(ERROR_BD);
   }
-
-  const datos = req.body;
-  if (!datos || typeof datos !== "object" || Array.isArray(datos)) {
-    return res.status(400).json({ mensaje: "Faltan datos o no son válidos" });
-  }
-
-  const campos = Object.keys(datos);
-  if (campos.length === 0 || campos.some((campo) => !["nombre", "precio", "stock"].includes(campo))) {
-    return res.status(400).json({ mensaje: "Faltan datos o no son válidos" });
-  }
-
-  if (
-    ("nombre" in datos && (typeof datos.nombre !== "string" || datos.nombre.trim() === "")) ||
-    ("precio" in datos &&
-      (typeof datos.precio !== "number" || !Number.isFinite(datos.precio) || datos.precio < 0)) ||
-    ("stock" in datos &&
-      (typeof datos.stock !== "number" || !Number.isFinite(datos.stock) || datos.stock < 0))
-  ) {
-    return res.status(400).json({ mensaje: "Faltan datos o no son válidos" });
-  }
-
-  Object.assign(producto, datos);
-  return res.status(200).json(producto);
 });
 
-app.delete("/productos/:id", (req, res) => {
-  const id = Number(req.params.id);
-  const indice = productos.findIndex((producto) => producto.id === id);
+// 4. PUT /productos/:id  -> UPDATE (reemplaza todos los campos)
+app.put("/productos/:id", async (req, res) => {
+  try {
+    const { nombre, precio, stock } = req.body;
 
-  if (indice === -1) {
-    return res.status(404).json({ mensaje: "Producto no encontrado" });
+    if (datosInvalidos(nombre, precio, stock)) {
+      return res.status(400).json({
+        error: "PUT requiere nombre, precio y stock válidos"
+      });
+    }
+
+    const [resultado] = await db.query(
+      "UPDATE productos SET nombre = ?, precio = ?, stock = ? WHERE id = ?",
+      [nombre.trim(), precio, stock, req.params.id]
+    );
+
+    if (resultado.affectedRows === 0) {
+      return res.status(404).json({ error: "Producto no encontrado" });
+    }
+
+    res.status(200).json({
+      id: Number(req.params.id),
+      nombre: nombre.trim(),
+      precio,
+      stock
+    });
+  } catch (error) {
+    res.status(500).json(ERROR_BD);
   }
-
-  productos.splice(indice, 1);
-  return res.status(204).end();
 });
 
-app.listen(PORT, () => {
+// 5. PATCH /productos/:id  -> UPDATE (solo los campos enviados)
+app.patch("/productos/:id", async (req, res) => {
+  try {
+    const camposPermitidos = ["nombre", "precio", "stock"];
+    const camposRecibidos = Object.keys(req.body);
+
+    if (
+      camposRecibidos.length === 0 ||
+      camposRecibidos.some((campo) => !camposPermitidos.includes(campo))
+    ) {
+      return res.status(400).json({
+        error: "Envía al menos un campo válido: nombre, precio o stock"
+      });
+    }
+
+    // Se lee el producto actual para combinarlo con los campos enviados
+    const [filas] = await db.query(
+      "SELECT * FROM productos WHERE id = ?",
+      [req.params.id]
+    );
+
+    if (filas.length === 0) {
+      return res.status(404).json({ error: "Producto no encontrado" });
+    }
+
+    const actual = filas[0];
+    const nombre = req.body.nombre ?? actual.nombre;
+    const precio = req.body.precio ?? actual.precio;
+    const stock = req.body.stock ?? actual.stock;
+
+    if (datosInvalidos(nombre, precio, stock)) {
+      return res.status(400).json({
+        error: "Los datos enviados no son válidos"
+      });
+    }
+
+    await db.query(
+      "UPDATE productos SET nombre = ?, precio = ?, stock = ? WHERE id = ?",
+      [nombre.trim(), precio, stock, req.params.id]
+    );
+
+    res.status(200).json({
+      id: actual.id,
+      nombre: nombre.trim(),
+      precio,
+      stock
+    });
+  } catch (error) {
+    res.status(500).json(ERROR_BD);
+  }
+});
+
+// 6. DELETE /productos/:id  -> DELETE
+app.delete("/productos/:id", async (req, res) => {
+  try {
+    const [resultado] = await db.query(
+      "DELETE FROM productos WHERE id = ?",
+      [req.params.id]
+    );
+
+    if (resultado.affectedRows === 0) {
+      return res.status(404).json({ error: "Producto no encontrado" });
+    }
+
+    res.status(204).end();
+  } catch (error) {
+    res.status(500).json(ERROR_BD);
+  }
+});
+
+// Arranque del servidor
+app.listen(PORT, (error) => {
+  if (error) {
+    console.error(`No se pudo iniciar en el puerto ${PORT}:`, error.message);
+    process.exit(1);
+  }
   console.log(`Servidor listo en http://localhost:${PORT}`);
 });
